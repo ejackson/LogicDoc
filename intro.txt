@@ -1,0 +1,331 @@
+* Introduction
+This is a concise, top-down introduction to logic programming which
+attempts to lead you that elusive AHA! moment of understanding what
+logic programming is all about.
+
+* Logic Programming
+A logic program consists of a logic expression(s) and a solution
+engine or solver.  A logic expression is a set of logic variables and
+constraints upon those variables.  The logic expression input to the
+logic engine which returns all assignments to the variables that
+satisify the constraints in the expresion.  Generally speaking you
+write the logic expressions, and the solver is provided (core.logic is
+the solver).
+
+This setup is similar to SQL, which is a relational statement that is
+input to a relational engine which returns all data satisfying that
+statement.
+
+** Core.logic syntax
+A core.logic program is written
+
+ (run* [logic-variable] &logic-expressions)
+
+This means: take the set of logic-expressions, run them through the
+solver and return all the values of logic-variable that satisfy the
+logic-expression.
+
+* Logic Expression
+A logic expression comprises a set of logic variables and a set of
+constraints upon the values that those logic variables can assume.
+
+** Logic Variables
+A logic variable, or lvar, is a variable that contains an ambiguous
+value. That is, the variable can take several values, but one at a
+time. How this is precisely done is beyond the scope of this
+introduction.
+
+A special value for lvars is _ which means "anything", much as * means
+"anything" in a shell, this means that the lvar can take on any value
+and still satisfy the constraints.  Furthermore, if you have two
+variables, than can be anything they will have values _.0 and _.1,
+meaning that each can be anything and they can be distinct from
+another, whereas if they were both _.0 it would mean they can be
+anything but must be equal to another.
+
+Logic variables are introduced into a program in two ways.
+
+The first is the main query variable introduced in
+
+ (run* [query-variable] ...)
+
+whose value will be the return value of the (run* ...) expression. There
+can only be one such main query variable, and it is usually named q.
+
+The other method of introducing logic variables is using the 'fresh'
+operator, much like 'let' in normal Clojure.  For instance the snippet
+
+ (fresh [a b c] &logic-experessions)
+
+introduces three logic variables, a, b and c, that may be used within
+the logic-expressions.
+
+** Logic Expressions
+Logic expressions constrain the values of logic variables.  They are
+composed of several operators that are combined in a logical AND
+(conjunction). So in
+
+ (run* [q]
+   (expression-1)
+   (expression-2)
+   (expression-3))
+
+each expression constrains q in some way, and run* will return the
+values of q that satisfies all three expressions.
+
+*** Unify, the most basic operator
+The most basic operator (constraint) is ==, or unify:
+
+ (== lvar1 lvar2)
+
+which serves to constrain each lvar to have the same set of possible
+values.
+
+**** Unification with a single lvar and a literal
+In the simplest case you can use Clojure literals for lvar1 or lvar2.
+For example the expression:
+
+ (run* [q]
+   (== q 1))
+
+constrains q to have the value of 1.  The whole run* expression
+evaluates to the value of the lvar q, hence it returns (1).  This
+means that the set of possible values that q can assume, under this
+constraint is only the integer 1.  You can use more complex datatypes
+too:
+
+ (run* [q]
+   (== q {:a 1 :b 2}))
+
+evaluates to: ({:a 1, :b 2}).
+
+Finally, the order of the arguments to == is irrelevent,
+
+ (run* [q]
+   (== 1 q))
+
+is also (1).
+
+Gotcha: Now although when printed an lvar looks like a list, this is
+not the literal syntax for an lvar; there is not in fact a literal
+syntax for an lvar.  So the program
+
+ (run* [q]
+   (== q '(1 2 3)))
+
+evaluates to ((1 2 3)), not (1 2 3), which you might not expect.  That
+is, q can only take the value of the list (1 2 3), not either 1 or 2
+or 3.
+
+As stated above run* finds the solutions that satisfies all the
+constraints, alternatively think of all the logical statements 
+combined with logical AND. Thus,
+
+ (run* [q]
+   (== q 1)
+   (== q 2))
+
+returns (); there are no values of q that satisfy all the constraints.
+That is, it's impossible for q to equal 1 AND for q to equal 2 at
+the same time.
+
+**** Unification of two lvars
+When you unify two lvars, the operation constrains each lvar to have
+the same set of possible values.  A mental shortcut is to consider
+unification to be the intersection of the two sets lvar values that
+exists 'before' unification.  For instance, if, without the
+introduction of the unification lvar1 has value (1, 2, 3) and lvar2
+has value (3, 4, 5), then, after unification, both will have the value
+(3).
+
+To demonstrate this we have to cheat and go out of order a bit.  As
+stated there is no literal syntax for an lvar, so to constrain lvar1
+to have value (1, 2, 3), we have to introduce a new operator, membero:
+
+ (membero x l)
+
+For now, and this true but not the full story, think of it as
+constraining x to be an element of the list l.  So the program
+
+ (run* [q]
+   (membero q [1 2 3]))
+
+evaluates to (1, 2, 3), meaning that q can be
+either 1 or 2 or 3, as we wanted.  Now we have our full demonstration:
+
+ (run* [q]
+   (fresh [a]
+     (membero q [1 2 3])
+     (membero a [3 4 5])
+     (== q a)))
+
+First we use run* and ask it to return the value of the lvar q under a
+set of constraints.  Then we introduce a new lvar, a.  Next come the
+three constraints which q must sati.  First we constrain q, as in the
+previous problem to have the value (1, 2, 3), that is, q can be either
+1 or 2 or 3, and the lvar a to have the value (3, 4, 5), that is, a
+can be 3 or 4 or 5.  Then we unify the two lvars, which leaves q and a
+both having the value of the intersection of (1, 2, 3) and (3, 4, 5):
+(3).  Note the logical AND between the expressions: run* returns the
+value of q that satisfies all of the constraints.  Finally, as the
+whole thing evaluates to value of q, it will evaluate to (3).
+
+*** Core.logic is Declarative
+Now some magic.  Core.logic is entirely declarative, in that the order
+of constraints does not matter as far as the value of the (run* ...)
+expression is concerned.  So the programs:
+
+ (run* [q]
+   (fresh [a]
+     (membero q [1 2 3])
+     (membero a [3 4 5])
+     (== q a)))
+
+ (run* [q]
+   (fresh [a]
+     (membero a [3 4 5])
+     (== q a)
+     (membero q [1 2 3])))
+
+ (run* [q]
+   (fresh [a]
+     (== q a)
+     (membero a [3 4 5])
+     (membero q [1 2 3])))
+
+all evaluate to (3).
+
+** Other logic operators
+We've seen the interaction of run*, fresh and ==, but these are the
+primitives of logic programming. core.logic provides some higher level
+relational operators based on these primitives, let's take a look at a
+few of them.
+
+*** Conso (the Magnificent)
+The most basic operator is conso; understand this and the rest will
+follow.  Conso is the most basic core.logic operator, and is,
+unsurprisingly, the logic programming equivalent of normal
+cons. Recall
+
+ (cons x r) returns s
+
+where s is a seq with the element x as its head and the seq r as its rest:
+
+ (cons 0 [1 2 3])  returns (0 1 2 3).
+
+Conso is similar
+
+ (conso x r s)
+
+It constrains the logic variables x, r and s such that s is a list
+with head x and rest r.  Again we can use either lvars or literals for
+any of x r s. So:
+
+ (run* [q]
+   (conso 1 [2 3] q))
+
+returns ((1 2 3)); that is, q is the lvar than can only take on the
+value of the list '(1 2 3).  We have asked run* to find the value of
+q, being a list, with head 1 and rest [2 3], and it finds '(1 2 3).
+
+Now some more magic:
+
+ (run* [q]
+   (conso 1 q [1 2 3]))
+
+returns ((2 3)); that is q is constrained to be that list which, when
+1 is added as the head results in the list (1 2 3).
+
+  (run* [q]
+    (conso q [2 3] [1 2 3]))
+
+returns (1); q is the element that when added to the head of [2 3]
+results in [1 2 3].  Even more interesting:
+
+  (run* [q]
+    (conso 1 [2 q] [1 2 3]))
+
+returns (3); q is that element of the list [2 element] that when 1 is
+added as the head becomes the list [1 2 3].
+
+
+*** More operators
+**** Resto
+Resto is the complement of conso
+
+ (resto l r)
+
+constrains whatever logic variables are present such that r is (rest
+l).  So
+
+ (run* [q]
+   (resto [1 2 3 4] q))
+
+returns ((2 3 4)).  The same reorderings and substitutions that we
+showed for conso apply here too.
+
+**** Membero
+
+We've already had a sneak peak at membero.
+
+ (membero x l)
+
+constrains whatever logic variables are present such that x is an
+element of l.
+
+ (run* [q]
+   (membero q [1 2 3]))
+
+returns (1, 2, 3); that is, either 1 or 2 or 3.
+
+ (run* [q]
+   (membero 7 [1 3 8 q]))
+
+returns (7), the only value that q can take such that 7 is an element
+of [1 3 8 q].
+
+***** An harder example
+The logic program
+
+ (run* [q]
+   (fresh [a]
+     (membero a [1 3 7 9])
+     (membero a [1 3 8 q])))
+
+returns (_.0 1 _.0 3 7 9); meaning that q can either be any value, or
+1 or 3 or 7 or 9 ?!  This can be understood looking more closely at
+the all the values in play
+
+ (run* [q]
+   (fresh [a b]
+     (== q [a b])
+     (membero a [1 3 7 9])
+     (membero a [1 3 8 b])))
+
+returns ([1 _.0] [1 1] [3 _.0] [3 3] [7 7] [9 9]).  This is the same
+logic program where the lvar b plays the role q did last time, and q
+is now constrained to be the vector with lvars a and b as elements so
+that we can examine them. Examining b we see it can be anything, or 1
+or 3 or 7 or 9, exactly as q was in the last example.  But we see that
+it can only assume these values when a assumes particular values.  So
+breaking it down, we first specify that a can be either 1 or 3 or 7
+or 9.  Now the first value for q is [1 _.0], that means that if a is
+1, b can be anything.  This makes sense, the second constraints is
+that a must be an element of [1 3 8 b], so, as 1 is already an element
+of that vector, the value of b is irrelevent, so it can be anything.
+The second element of q is [1 1], this means that if a is 1, b can
+be 1.  This is trivially true.  The same logic applies for the third
+and fourth elements of q.  The last two elements of q are more
+interesting.  The fifth element of q is [7 7], and there are no other
+elements of q where the a is 7.  So this means that if a is 7, then b
+can only be 7.  The same logic applies to the last element of q, [9
+9]. Together these are all the consistent solution to the set of
+constraints given.
+
+* Summary
+This introduction has given the basic idea of logic programming: it is
+a set of variables and constraints upon them, which are fed into a
+solution engine which returns the complete set of consistent solutions
+to that set of constraints. The key concept is the logic variable
+which is a variable that can assume a number of distinct values one at
+a time.
