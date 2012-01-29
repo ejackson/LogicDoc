@@ -1,22 +1,22 @@
 * Introduction
-This is a concise, top-down introduction to logic programming which
+This is a top-down introduction to core.logic which
 attempts to lead you that elusive AHA! moment of understanding what
-logic programming is all about.
+logic programming is about.
 
 * Logic Programming
 A logic program consists of a logic expression(s) and a solution
 engine or solver.  A logic expression is a set of logic variables and
-constraints upon those variables.  The logic expression input to the
-logic engine which returns all assignments to the variables that
+constraints upon those variables.  The logic expression is input to the
+logic engine which returns all assignments to the logic variables that
 satisify the constraints in the expresion.  Generally speaking you
 write the logic expressions, and the solver is provided (core.logic is
 the solver).
 
 This setup is similar to SQL, which is a relational statement that is
-input to a relational engine which returns all data satisfying that
+input to a relational engine which returns all data in the database satisfying that
 statement.
 
-** Core.logic syntax
+* Core.logic syntax
 A core.logic program is written
 
  (run* [logic-variable] &logic-expressions)
@@ -25,23 +25,53 @@ This means: take the set of logic-expressions, run them through the
 solver and return all the values of logic-variable that satisfy the
 logic-expression.
 
-* Logic Expression
+** Logic Expression
 A logic expression comprises a set of logic variables and a set of
 constraints upon the values that those logic variables can assume.
 
-** Logic Variables
+*** Logic Variables
 A logic variable, or lvar, is a variable that contains an ambiguous
-value. That is, the variable can take several values, but one at a
+value. That is, the variable can take several values, but only one at a
 time. How this is precisely done is beyond the scope of this
 introduction.
 
+*** Constraints
+Constraints are expressions that limit the values the lvars may assume.
+
+* Motivating Example
+
+An example is useful here.  The core.logic program
+
+ (run* [q]
+       (membero q [1 2 3])
+       (membero q [2 3 4]))
+
+is read: run the logic engine and return all values of q such that q
+is a member of the vector [1 2 3] and a member of the set [2 3 4].  It
+will thus return (2 3), indicating that q can be either 2 or 3 and
+satisfy the constraints.  The return value of run* is a list where each
+element is one of the possible values of q.
+
+This is what logic programming is all about: declaring a set of logic variables and
+constraints and having a logic engine figure out what values of
+variables satisfy the constraints.
+
+* Going deeper
+We now explore each of these concepts further to develop a better understanding.
+
+** Logic Variables
+
+As mentioned logic variables are variables with an ambiguous value,
+which when printed look like lists, where each element of the list is
+one possible value of the variable. 
+
 A special value for lvars is _ which means "anything", much as * means
 "anything" in a shell, this means that the lvar can take on any value
-and still satisfy the constraints.  Furthermore, if you have two
-variables, than can be anything they will have values _.0 and _.1,
-meaning that each can be anything and they can be distinct from
-another, whereas if they were both _.0 it would mean they can be
-anything but must be equal to another.
+and still satisfy the constraints. This is called the ground state.
+Furthermore, if you have two variables, that can be anything they will
+have values _.0 and _.1,meaning that each can be anything and they can
+be distinct from another, whereas if they were both _.0 it would mean
+they can be anything but must be equal to another.
 
 Logic variables are introduced into a program in two ways.
 
@@ -55,33 +85,50 @@ can only be one such main query variable, and it is usually named q.
 The other method of introducing logic variables is using the 'fresh'
 operator, much like 'let' in normal Clojure.  For instance the snippet
 
- (fresh [a b c] &logic-experessions)
+ (fresh [a b c] &logic-expressions)
 
 introduces three logic variables, a, b and c, that may be used within
-the logic-expressions.
+the logic-expressions.  fresh introduces the variables in the ground state.
 
-** Logic Expressions
+** More on Constraints
 Logic expressions constrain the values of logic variables.  They are
-composed of several operators that are combined in a logical AND
+composed of several constraints that are combined in a logical AND
 (conjunction). So in
 
  (run* [q]
-   (expression-1)
-   (expression-2)
-   (expression-3))
+   (constraint-1)
+   (constraint-2)
+   (constraint-3))
 
 each expression constrains q in some way, and run* will return the
-values of q that satisfies all three expressions.
+values of q that satisfies all three expressions.  
+
+*** Goals
+core.logic is based upon miniKanren and in this system we create
+constraints in a particular way.  Each is a function that returns one of two
+values: succeed or fail. When a goal returns succeed we say it has
+succeeded, and if it returns fail that it has failed.  The logic engine explores the possible
+values of all the lvars and returns those for which all the goals
+succeed.  Hence the goals behave as a conjunction of constraints upon the lvars.
+
+** The core.logic operators
+miniKanren and hence core.logic are based upon three core operators:
+fresh, == and conde.
+
+*** fresh
+We have already seen fresh, which introduces new lvars, in the ground state, into the logic
+program.
 
 *** Unify, the most basic operator
-The most basic operator (constraint) is ==, or unify:
+The most fundamental operator is ==, or unify:
 
  (== lvar1 lvar2)
 
 which serves to constrain each lvar to have the same set of possible
-values.
+values.  It is a goal that succeeds if lvar1 can be made equal to
+lvar2, otherwise it fails.
 
-**** Unification with a single lvar and a literal
+**** Unification of a single lvar and a literal
 In the simplest case you can use Clojure literals for lvar1 or lvar2.
 For example the expression:
 
@@ -135,12 +182,12 @@ the same set of possible values.  A mental shortcut is to consider
 unification to be the intersection of the two sets lvar values that
 exists 'before' unification.  For instance, if, without the
 introduction of the unification lvar1 has value (1, 2, 3) and lvar2
-has value (3, 4, 5), then, after unification, both will have the value
+has value (3, 4, 5), then, with unification, both will have the value
 (3).
 
 To demonstrate this we have to cheat and go out of order a bit.  As
 stated there is no literal syntax for an lvar, so to constrain lvar1
-to have value (1, 2, 3), we have to introduce a new operator, membero:
+to have value (1, 2, 3), we have to introduce a goal, membero:
 
  (membero x l)
 
@@ -168,9 +215,9 @@ can be 3 or 4 or 5.  Then we unify the two lvars, which leaves q and a
 both having the value of the intersection of (1, 2, 3) and (3, 4, 5):
 (3).  Note the logical AND between the expressions: run* returns the
 value of q that satisfies all of the constraints.  Finally, as the
-whole thing evaluates to value of q, it will evaluate to (3).
+whole thing evaluates to the value of q, it will evaluate to (3).
 
-*** Core.logic is Declarative
+**** Core.logic is Declarative
 Now some magic.  Core.logic is entirely declarative, in that the order
 of constraints does not matter as far as the value of the (run* ...)
 expression is concerned.  So the programs:
@@ -195,15 +242,93 @@ expression is concerned.  So the programs:
 
 all evaluate to (3).
 
-** Other logic operators
-We've seen the interaction of run*, fresh and ==, but these are the
-primitives of logic programming. core.logic provides some higher level
-relational operators based on these primitives, let's take a look at a
+*** The final operator, conde
+We have introduced run*, fresh and ==, and there is only one more
+operator: conde. Unsurprisingly conde behaves a lot like cond, and is
+logical disjunction (OR). Its syntax is
+
+ (conde &clauses)
+
+where each clause is a series of at least one goal, which are combined
+in conjunction.  conde succeeds for each clause that succeeds,
+independently.  Yes, that is confusing, some examples may help:
+
+ (run* [q]
+      (conde
+       (succeed)))
+
+returns (_.0).  conde succeeds because succeed succeeds, however q is
+not involved and hence can take on any value.
+
+There can be any number of goals in the clause
+
+ (run* [q]
+      (conde
+       (succeed succeed succeed succeed)))
+
+also returns (_.0) and each term in the clause for conde succeeds, and
+the combined in logical conjunction.
+
+Each goal in the clause is combined in logical conjuction (AND)
+
+ (run* [q]
+      (conde
+       (succeed succeed fail succeed)))
+
+returns (), as conde has failed and hence no value of q can create
+success.  conde failed because of the fail in the clause, which due to
+the conjunction causes the entire clause to fail.
+
+conde succeeds/fails for each clause independently
+
+(run* [q]
+      (conde
+       (succeed)
+       (succeed)))
+
+returns (_.0 _.0).  There are two values here because conde succeeds
+twice, once for each clause.
+
+The above examples show the logical structure, but lets see some output.
+
+ (run* [q]
+      (conde
+       (succeed (== q 1))))
+
+returns (1).  This is because succeed and (== q 1) both succeed, if q
+is 1.  Having two elements in the conde clause is the usual structure
+as it reminds us of cond, bear in mind the difference though.
+
+(run* [q]
+      (conde
+       ((== q 2) (== q 1))))
+
+returns ().  If you think of conde too much like cond you might expect
+it to return (1).  You would think (== q 2) succeeds (like returning
+true in cond) and then the expression (== q 1) is evaluated and
+succeeds, setting q to 1. This is wrong!  Each expression in the clause is combined in AND,
+in this case it is not possible for q to be 2 and 1 at the same time,
+hence the clause fails, hence conde fails, so with no way to achieve
+success q has value ().
+
+ (run* [q]
+      (conde
+       ((== q 1))
+       ((== q 2))))
+
+returns (1 2).  The difference here is that each unification is in a
+different clause of conde, and each can succeeds independently,
+producing a value for q.
+
+** More Goals
+We've seen the interaction of the three operators, but these are the
+primitives of logic programming. core.logic provides some other
+goals based on these primitives, let's take a look at a
 few of them.
 
 *** Conso (the Magnificent)
-The most basic operator is conso; understand this and the rest will
-follow.  Conso is the most basic core.logic operator, and is,
+The most basic goal is conso; understand this and the rest will
+follow.  Conso is the most basic core.logic goal, and is,
 unsurprisingly, the logic programming equivalent of normal
 cons. Recall
 
@@ -248,9 +373,9 @@ results in [1 2 3].  Even more interesting:
 returns (3); q is that element of the list [2 element] that when 1 is
 added as the head becomes the list [1 2 3].
 
+In summary: (conso f r s) succeeds if (first s) is f and (rest s) is r.
 
-*** More operators
-**** Resto
+*** Resto
 Resto is the complement of conso
 
  (resto l r)
@@ -264,9 +389,11 @@ l).  So
 returns ((2 3 4)).  The same reorderings and substitutions that we
 showed for conso apply here too.
 
-**** Membero
+In summary: (resto l r) succeeds if (rest l) is r.
 
-We've already had a sneak peak at membero.
+*** Membero
+
+We've already had a sneak peak at membero:
 
  (membero x l)
 
@@ -284,48 +411,18 @@ returns (1, 2, 3); that is, either 1 or 2 or 3.
 returns (7), the only value that q can take such that 7 is an element
 of [1 3 8 q].
 
-***** An harder example
-The logic program
-
- (run* [q]
-   (fresh [a]
-     (membero a [1 3 7 9])
-     (membero a [1 3 8 q])))
-
-returns (_.0 1 _.0 3 7 9); meaning that q can either be any value, or
-1 or 3 or 7 or 9 ?!  This can be understood looking more closely at
-the all the values in play
-
- (run* [q]
-   (fresh [a b]
-     (== q [a b])
-     (membero a [1 3 7 9])
-     (membero a [1 3 8 b])))
-
-returns ([1 _.0] [1 1] [3 _.0] [3 3] [7 7] [9 9]).  This is the same
-logic program where the lvar b plays the role q did last time, and q
-is now constrained to be the vector with lvars a and b as elements so
-that we can examine them. Examining b we see it can be anything, or 1
-or 3 or 7 or 9, exactly as q was in the last example.  But we see that
-it can only assume these values when a assumes particular values.  So
-breaking it down, we first specify that a can be either 1 or 3 or 7
-or 9.  Now the first value for q is [1 _.0], that means that if a is
-1, b can be anything.  This makes sense, the second constraints is
-that a must be an element of [1 3 8 b], so, as 1 is already an element
-of that vector, the value of b is irrelevent, so it can be anything.
-The second element of q is [1 1], this means that if a is 1, b can
-be 1.  This is trivially true.  The same logic applies for the third
-and fourth elements of q.  The last two elements of q are more
-interesting.  The fifth element of q is [7 7], and there are no other
-elements of q where the a is 7.  So this means that if a is 7, then b
-can only be 7.  The same logic applies to the last element of q, [9
-9]. Together these are all the consistent solution to the set of
-constraints given.
+In summary: (membero x l) succeeds if x is any of the members of l.
 
 * Summary
 This introduction has given the basic idea of logic programming: it is
 a set of variables and constraints upon them, which are fed into a
 solution engine which returns the complete set of consistent solutions
-to that set of constraints. The key concept is the logic variable
-which is a variable that can assume a number of distinct values one at
-a time.
+to that set of constraints. 
+
+The key concepts are the logic variable and the goal.  A logic
+variable  is a variable that can assume a number of distinct values
+one at a time.  A goal is a function that returns succeed or
+fail. Goals are composed into a logic expression.  Run* invokes the
+logic engine over a logic expression and returns the complete set of
+values of the query logic variable that allow the logic expression to succeed.
+
